@@ -12,7 +12,18 @@ db([1, 0, 50], 0).
 db([0, 0, 83], 0).
 db([0, 1, 18], 1).
 
+the tree for this dataset
+
+Tree = choice(2, 0.5, choice(3, 12.5, class(0), class(1)), class(0)),
+classify(Tree, [1, 2, 15], Class).
+
+
 */
+
+classify(class(Class), _, Class).
+classify(choice(FeatureN, LessThan, ChoiceL, ChoiceR), Features, Class) :-
+	nth1(FeatureN, Features, FVal),
+	(FVal < LessThan -> classify(ChoiceL, Features, Class); classify(ChoiceR, Features, Class)).
 
 nth1_feature(N, Fs) :- nth1_featureclass(N, FCs), pairs_keys(FCs, Fs).
 
@@ -56,7 +67,6 @@ bisect_on_boundary([F-C|FCs], Boundary, Bisected) :-
 	bisect_on_boundary_([F-C|FCs], Boundary, [], Bisected).
 
 bisect_on_boundary_([], _, Bisected, Bisected).
-
 bisect_on_boundary_([F-C|FCs], Boundary, Accum, Bisected) :-
 	(F < Boundary -> V = lt; V = gt),
 	bisect_on_boundary_(FCs, Boundary, [V-C|Accum], Bisected).
@@ -76,30 +86,27 @@ pairs_KMinV([K0-V0|KVs], K-MinV) :-
 	pairs_KMinV_(KVs, K0, V0, K, MinV).
 
 pairs_KMinV_([], KMinV, MinV, KMinV, MinV).
-	% Support function for pairs_KMinV
-
 pairs_KMinV_([K1-V1|KVs], K0, V0, KMinV, MinV) :-
 	% Support function for pairs_KMinV
 	(V1 < V0 -> pairs_KMinV_(KVs, K1, V1, KMinV, MinV);  pairs_KMinV_(KVs, K0, V0, KMinV, MinV)).
 
-min_wgini(FeatureN, KVMin) :-
+min_wgini(FeatureN, LtMinWGini) :-
+	% The Numbered Feature and the lowest LessThan-WeightedGini pair
 	findall(Lt-WGini, bisect_giniBoundaries(FeatureN, Lt, WGini), LWs),
-	pairs_KMinV(LWs, KVMin).
+	pairs_KMinV(LWs, LtMinWGini).
 
-
-
-feature_LtWGinis(LtWginis) :-
+ltsFn_wGinisFn(Lts, Wginis) :-
+	% list of Lt-WGini for each feature
 	indexesOfFeatures(FIdxs),
-	feature_LtWGini(FIdxs, LtWginis).
+	featureIdxs_Lts_WGinis(FIdxs, Lts, Wginis).
 
-feature_LtWGini([Fi|FIdxs], LtWginis) :-
-	feature_LtWGini_([Fi|FIdxs], [],  LtWginis).
+featureIdxs_Lts_WGinis([Fi|FIdxs], Lts, Wginis) :-
+	featureIdxs_Lts_WGinis_([Fi|FIdxs], [], [], Lts, Wginis).
 
-feature_LtWGini_([Fi|FIdxs], LtWginisA,  LtWginis) :-
-	min_wgini(Fi, KVMin),
-	feature_LtWGini_(FIdxs, [KVMin|LtWginisA], LtWginis).
-	
-feature_LtWGini_([],LtWginisA,LtWginis) :- reverse(LtWginisA,LtWginis).
+featureIdxs_Lts_WGinis_([], LtA, WginisA, Lts, Wginis) :- reverse(LtA, Lts), reverse(WginisA, Wginis).
+featureIdxs_Lts_WGinis_([Fi|FIdxs], LtA, WginisA,  Lts, Wginis) :-
+	min_wgini(Fi, Lt-GiniMin),
+	featureIdxs_Lts_WGinis_(FIdxs, [Lt-Fi|LtA], [GiniMin-Fi|WginisA], Lts, Wginis).
 	
 indexesOfFeatures(Idxs) :-
 	clause(db(Fs, _), _), 
@@ -111,7 +118,6 @@ indexesOfFeatures_([], Idxs, _, Idxs).
 indexesOfFeatures_([_|Fs], Idxa, N, Idxs) :-
 	Nm1 is N-1,
 	indexesOfFeatures_(Fs, [N|Idxa], Nm1, Idxs).
-
 
 is_class_counts(YesNos, Yes, No) :-
 	% given a list of _-C pairs, count the _-1 as Yes, _-0 as No
@@ -153,8 +159,11 @@ is_lt(LtGt-_) :- LtGt = lt.
 is_gt(LtGt-_) :- LtGt = gt.
 is_class(_-C) :- C = 1.
 
-
-
+root(choice(Fn, Lt, 0, 0)) :-
+	ltsFn_wGinisFn(Lts, Wginis),
+	sort(Wginis, [_-Fn|_]),
+	nth1(Fn, Lts, Lt-Fn).
+	
 
 
 /*
